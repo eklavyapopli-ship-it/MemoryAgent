@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.mongodb import MongoDBSaver
 load_dotenv()
 class State(TypedDict):
     messages: Annotated[list, add_messages]
@@ -20,9 +21,6 @@ llm  = ChatGoogleGenerativeAI(
     model="gemini-2.0-flash",
     
 )
-
-
-
 
 systemPrompt = '''
 You are Libris, an insightful literary companion AI. You discuss novels, themes, and characters with depth, offering thoughtful interpretations, emotional insights, and reflective questions. Never quote books directly; focus on analysis, opinions, and engaging conversation. Adapt your tone to be cozy, dark, or philosophical depending on the user’s mood.
@@ -38,5 +36,18 @@ graph_builder.add_edge(START,"chatbot")
 graph_builder.add_edge("chatbot", END)
 
 graph = graph_builder.compile()
-updatedState = graph.invoke(State({"messages":["what is my name"]}))
-print(updatedState)
+
+def compile_graph_with_checkpointer(checkpointer):
+    return graph_builder.compile(checkpointer=checkpointer)
+DB_URI = "mongodb://admin:admin@localhost:27017"
+with MongoDBSaver.from_conn_string(DB_URI) as checkpointer:
+    graph_with_checkpointer = compile_graph_with_checkpointer(checkpointer=checkpointer)
+    config = {
+        "configurable":{
+            "thread_id":"eklavya"
+        }
+    }
+    
+
+    for chunk in graph_with_checkpointer.stream(State({"messages":["what is my name?"]}),config, stream_mode="values"):
+        chunk["messages"][-1].pretty_print()
